@@ -113,7 +113,7 @@ def score_from_selfies_to_smiles(selfie, scores):
     """
     smiles, attributions = sf.decoder(selfie, attribute=True)
     smiles_tokens, atom_char_list, true_char_list = smiles_parser(smiles)
-    skipped_chars = ['(', ')', '1', '2', '3', '4', '5', '6', '7', '8', '9', ']', '[', '@']
+    skipped_chars = ['(', ')', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ']', '[', '@', '%']
     smiles_scores = defaultdict(float)
     smiles_scores_list = []
     for smiles_token in attributions:
