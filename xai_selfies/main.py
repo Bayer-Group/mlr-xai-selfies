@@ -247,8 +247,7 @@ def get_attributions_df(smiles_list, model, embedder, ids=None, similarity=0.):
         pred = original_preds[i]
         orig_selfie = pd.unique(mutant_df_mol['selfies'])[0]
         mutant_df_mol['difference'] = pred - mutant_df_mol['predictions']
-        mean_of_position_df = mutant_df_mol.groupby(by=['molid', 'mutation_pos']).mean().reset_index()
-        mean_of_position = mean_of_position_df['difference'].tolist()
+        mean_of_position = mutant_df_mol.groupby(by=['molid', 'mutation_pos'])["difference"].mean().tolist()
         print('Got selfies attributions.')
 
         # translate to the SMILES world
