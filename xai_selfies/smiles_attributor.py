@@ -135,7 +135,7 @@ def predictor_smiles(smiles, featureMETHOD, model):
     prediction = model.predict(prep_features_smiles)
     return prediction
 
-def attribute_smiles(smiles:str,model) -> np.array:
+def attribute_smiles(smiles:str,model,featureMETHOD) -> np.array:
     """
     
     >>> attribute_smiles("CC(Cl)CCCCl",num_chlorines_model)

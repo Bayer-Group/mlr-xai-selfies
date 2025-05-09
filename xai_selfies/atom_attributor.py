@@ -85,6 +85,7 @@ def mutate_atoms(smiles, mutation_subset=None):
                 yield (atom_idx, original_symbol, replacement_symbol, new_smiles)
             except Exception:
                 # Skip invalid mutations
+                yield (atom_idx, original_symbol, None, '')
                 continue
 
 
@@ -103,7 +104,8 @@ def attribute_atoms(smiles: str, model, featureMETHOD) -> np.array:
     for atom_idx, old_sym, new_sym, mutated in mutate_atoms(smiles):
         if atom_idx not in mutated_dict:
             mutated_dict[atom_idx] = []
-        mutated_dict[atom_idx].append(mutated)
+        if mutated:
+            mutated_dict[atom_idx].append(mutated)
 
     y_org = predictor_on_smiles(smiles, featureMETHOD, model)
     attributions = []
