@@ -127,6 +127,13 @@ def num_chlorines_model(smi):
     mol = Chem.MolFromSmiles(smi)
     return sum(1 for atom in mol.GetAtoms() if atom.GetSymbol() == 'Cl')
 
+def predictor_smiles(smiles, featureMETHOD, model):
+    data_smiles = {'SMILES': [smiles]}
+    df_smiles = pd.DataFrame(data_smiles)
+    df_smiles['Feature'] = df_smiles['SMILES'].apply(featureMETHOD)
+    prep_features_smiles = get_features(df_smiles, ['Feature'])
+    prediction = model.predict(prep_features_smiles)
+    return prediction
 
 def attribute_smiles(smiles:str,model) -> np.array:
     """
@@ -138,10 +145,10 @@ def attribute_smiles(smiles:str,model) -> np.array:
     """
     per_atom_mutations = generate_mutations(smiles)
 
-    y_org = model(smiles)
+    y_org = predictor_smiles(smiles, featureMETHOD, model)
     attributions = []
     for mutations in per_atom_mutations:
-        y_mut = [model(mutation) for mutation in mutations]
+        y_mut = [predictor_smiles(mutation, featureMETHOD, model) for mutation in mutations]
         y_diff = y_org - np.array(y_mut)
         attributions.append(y_diff.mean())
     
