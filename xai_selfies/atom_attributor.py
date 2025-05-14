@@ -1,6 +1,10 @@
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.rdchem import PeriodicTable
+import numpy as np
+import pandas as pd
+
+from xai_selfies.ml_helper import *
 
 # Organic subset as defined by RDKit
 ORGANIC_ATOM_SYMBOLS = [
@@ -52,7 +56,8 @@ def mutate_atoms(smiles, mutation_subset=None):
     global ORGANIC_ATOM_SYMBOLS
     if mutation_subset is None:
         mutation_subset = ORGANIC_ATOM_SYMBOLS
-    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.MolFromSmiles(smiles, sanitize=False) # to keep the explicit hydrogens
+    Chem.SanitizeMol(mol)  # to keep the explicit hydrogens
     if mol is None or mol.GetNumAtoms() == 0:
         return mol # nothing to mutate
 
@@ -80,7 +85,39 @@ def mutate_atoms(smiles, mutation_subset=None):
                 yield (atom_idx, original_symbol, replacement_symbol, new_smiles)
             except Exception:
                 # Skip invalid mutations
+                yield (atom_idx, original_symbol, None, '')
                 continue
+
+
+def predictor_on_smiles(smiles, featureMETHOD, model):
+    data_smiles = {'SMILES': [smiles]}
+    df_smiles = pd.DataFrame(data_smiles)
+    df_smiles['Feature'] = df_smiles['SMILES'].apply(featureMETHOD)
+    prep_features_smiles = get_features(df_smiles, ['Feature'])
+    prediction = model.predict(prep_features_smiles)
+    return prediction
+
+
+def attribute_atoms(smiles: str, model, featureMETHOD) -> np.array:
+    mutated_dict = {}
+
+    for atom_idx, old_sym, new_sym, mutated in mutate_atoms(smiles):
+        if atom_idx not in mutated_dict:
+            mutated_dict[atom_idx] = []
+        if mutated:
+            mutated_dict[atom_idx].append(mutated)
+
+    y_org = predictor_on_smiles(smiles, featureMETHOD, model)
+    attributions = []
+    for index in mutated_dict:
+        y_mut = [predictor_on_smiles(mutation, featureMETHOD, model) for mutation in mutated_dict[index]]
+        y_diff = y_org - np.array(y_mut)
+        attributions.append(y_diff.mean())
+
+    mol = Chem.MolFromSmiles(smiles, sanitize=False) # to keep the explicit hydrogens
+    Chem.SanitizeMol(mol)  # to keep the explicit hydrogens
+    assert len(attributions) == mol.GetNumAtoms()
+    return attributions
 
 if __name__ == "__main__":
     smiles_input = "CCO"  # Ethanol
