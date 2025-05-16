@@ -110,9 +110,15 @@ def attribute_atoms(smiles: str, model, featureMETHOD) -> np.array:
     y_org = predictor_on_smiles(smiles, featureMETHOD, model)
     attributions = []
     for index in mutated_dict:
-        y_mut = [predictor_on_smiles(mutation, featureMETHOD, model) for mutation in mutated_dict[index]]
-        y_diff = y_org - np.array(y_mut)
-        attributions.append(y_diff.mean())
+        mutated_df = pd.DataFrame(mutated_dict[index])
+        if mutated_df.empty:#no mutations were generated
+            attributions.append(np.nan)
+        else:
+            mutated_df['Feature'] = mutated_df[0].apply(featureMETHOD)
+            prep_features_mutat = get_features(mutated_df, ['Feature'])
+            prediction = model.predict(prep_features_mutat)
+            y_diff = y_org - prediction
+            attributions.append(y_diff.mean())
 
     mol = Chem.MolFromSmiles(smiles, sanitize=False) # to keep the explicit hydrogens
     Chem.SanitizeMol(mol)  # to keep the explicit hydrogens
