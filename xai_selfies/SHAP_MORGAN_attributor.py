@@ -42,10 +42,9 @@ def weights_morgan(smiles, coefficients_total):
 
     return atom_weights
 
-def get_SHAP_Morgan_attributions(data, feature_column, smiles_column, model):
+def get_SHAP_Morgan_attributions(data, feature_column, smiles_column, model, explainer):
     prep_data = get_features(data, [feature_column])
 
-    explainer = shap.TreeExplainer(model.named_steps['model'])#KernelExplainer(model.predict, model.named_steps['scaler'].transform(prep_data))
     shap_values = explainer.shap_values(model.named_steps['scaler'].transform(prep_data))
     print("Shap values are calculated.")
 
