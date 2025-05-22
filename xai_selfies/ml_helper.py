@@ -4,6 +4,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from sklearn.model_selection import KFold
+from sklearn.experimental import enable_halving_search_cv
 from sklearn.model_selection import HalvingRandomSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
