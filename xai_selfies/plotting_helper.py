@@ -41,8 +41,8 @@ def plot_histogram(dataset1, dataset2, colum_of_interest, x_Label, y_Label, data
 
     plt.rcParams['font.family'] = 'arial'
     bar_width = 0.4  # Width of the bars
-    plt.bar(bins[:-1] - bar_width / 2, dataset1_counts, width=bar_width, label=dataset1_name, align='center', color='#82d8a1')
-    plt.bar(bins[:-1] + bar_width / 2, dataset2_counts, width=bar_width, label=dataset2_name, align='center', color='#b2b2b2')
+    plt.bar(bins[:-1] - bar_width / 2, dataset1_counts, width=bar_width, label=dataset1_name, align='center', color='#A43341')
+    plt.bar(bins[:-1] + bar_width / 2, dataset2_counts, width=bar_width, label=dataset2_name, align='center', color='#A43341')
 
     plt.xlabel(x_Label, fontsize=18)
     plt.ylabel(y_Label, fontsize=18)
