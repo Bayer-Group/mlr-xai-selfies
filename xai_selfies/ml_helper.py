@@ -1,15 +1,31 @@
 import numpy as np
+import pickle
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from sklearn.model_selection import KFold
 from sklearn.experimental import enable_halving_search_cv
+from sklearn.model_selection import KFold
 from sklearn.model_selection import HalvingRandomSearchCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 import statistics
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.metrics import mean_absolute_error, mean_squared_error, max_error, accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.neural_network import MLPRegressor
+from sklearn.linear_model import BayesianRidge
+from sklearn.gaussian_process.kernels import Matern
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.linear_model import Lasso
+from sklearn.svm import SVR
+
+from xai_selfies.plotting_helper import *
 
 def get_features(data, CLOUMS):
     """
@@ -187,3 +203,188 @@ def hp_search_helper(model,df_train,target,feature):
     mean_RMSE = statistics.mean(RMSE)
     
     return pipe.best_estimator_, mean_r2, mean_R2, mean_MAE, mean_RMSE
+
+def split_data(data, Target_Column_Name, working_dir):
+    nr_test_samples = round(len(data) / 5) # 80/20 split
+    test = data.sample(n=nr_test_samples, random_state=6)
+    target_test = test[Target_Column_Name].values
+    train = data.drop(test.index)
+    #plot_histogram(test, train,  Target_Column_Name, 'Target', 'Stucture Count', 'Test Set', 'Train Set',  working_dir + 'Count-Bins-test-train.png')
+    return test, target_test, train
+
+def features_and_reg_model_types(data):
+    data['Morgan_Fingerprint 2048Bit 2rad'] = data['smiles_std'].apply(get_morgan_fingerprint)
+    data['MACCS_Fingerprint'] = data['smiles_std'].apply(get_MACCS_fingerprint)
+    data['RDK_Fingerprint'] = data['smiles_std'].apply(get_RDK_fingerprint)
+
+    ALLfeatureCOLUMS = ['Morgan_Fingerprint 2048Bit 2rad',
+            'RDK_Fingerprint',
+            'MACCS_Fingerprint']
+        
+    model_types = [MLPRegressor(), 
+            BayesianRidge(), 
+            Lasso(), 
+            GradientBoostingRegressor(), 
+            LinearRegression(), 
+            RandomForestRegressor(), 
+            SVR(),
+            GaussianProcessRegressor(kernel=Matern())]
+    return data, ALLfeatureCOLUMS, model_types
+
+def features_and_class_model_types(data):
+    data['Morgan_Fingerprint 2048Bit 2rad'] = data['smiles_std'].apply(get_morgan_fingerprint)
+    data['MACCS_Fingerprint'] = data['smiles_std'].apply(get_MACCS_fingerprint)
+    data['RDK_Fingerprint'] = data['smiles_std'].apply(get_RDK_fingerprint)
+
+    ALLfeatureCOLUMS = ['Morgan_Fingerprint 2048Bit 2rad',
+            'RDK_Fingerprint',
+            'MACCS_Fingerprint']
+        
+    model_types = [MLPClassifier(), 
+            GradientBoostingClassifier(), 
+            RandomForestClassifier(), 
+            SVC(),
+            GaussianProcessClassifier()]
+    return data, ALLfeatureCOLUMS, model_types
+
+def get_best_reg_model(model_types, ALLfeatureCOLUMS, train, Target_Column_Name, working_dir):
+    results = []
+
+    for model_arc in model_types:          
+        for feature in ALLfeatureCOLUMS:
+            model, r2, R2, MAE, RMSE = hp_search_helper(model_arc,train,Target_Column_Name,[str(feature)])
+            results.append({'Feature': feature,'Model_Type': model_arc,'Model': model,'r2': r2,'R2': R2,'MAE': MAE,'RMSE': RMSE})
+
+    results_df = pd.DataFrame(results)
+    best_model_row = results_df.loc[results_df['MAE'].idxmin()]
+    model = best_model_row['Model']
+    print('Best Model: ', best_model_row['Model'])
+    print('With a MAE of: ', best_model_row['MAE'])
+    print('Feature: ', best_model_row['Feature'])
+    results_df.to_csv(working_dir + "Grid-Search.csv", index=False)
+
+    #pick feature function
+    if best_model_row['Feature'] == 'Morgan_Fingerprint 2048Bit 2rad':
+        feature_function = get_morgan_fingerprint
+    if best_model_row['Feature'] == 'RDK_Fingerprint':
+        feature_function = get_RDK_fingerprint
+    if best_model_row['Feature'] == 'MACCS_Fingerprint':
+        feature_function = get_MACCS_fingerprint
+
+    #train model on trining set
+    featureCOLUMS = [best_model_row['Feature']]
+
+    return model, feature_function, featureCOLUMS
+
+def get_and_train_class_model(train, test, Target_Column_Name, target_test, working_dir):
+    
+    #fixed settings
+    feature_function = get_morgan_fingerprint
+    featureCOLUMS = ['Morgan_Fingerprint 2048Bit 2rad']
+    model = Pipeline(steps=[('scaler', StandardScaler()),
+                ('model',
+                 RandomForestClassifier(random_state=42))])
+
+    #train on whole training set
+    prep_train = get_features(train, featureCOLUMS)
+    target_train = train[Target_Column_Name].values
+    model.fit(prep_train, target_train)
+
+    #performance on test set
+    prep_test = get_features(test, featureCOLUMS)
+    predictions = model.predict(prep_test)
+
+    #statistic on testset
+    accuracy = accuracy_score(target_test, predictions)
+    precision = precision_score(target_test, predictions, average='weighted')  # or 'macro', 'micro'
+    recall = recall_score(target_test, predictions, average='weighted')
+    f1 = f1_score(target_test, predictions, average='weighted')
+    conf_matrix = confusion_matrix(target_test, predictions)
+
+    # Print results
+    print("Performance on testset:")
+    print(f"Accuracy: {accuracy}")
+    print(f"Precision: {precision}")
+    print(f"Recall: {recall}")
+    print(f"F1-score: {f1}")
+    print("Confusion Matrix:\n", conf_matrix)
+
+    pickle.dump(model, open(working_dir + "model.pkl", "wb"))
+
+    return model, feature_function, featureCOLUMS
+
+
+def train_and_evaluate_reg_model(model, train, test, featureCOLUMS, Target_Column_Name, target_test, working_dir):
+
+    #train on whole training set
+    prep_train = get_features(train, featureCOLUMS)
+    target_train = train[Target_Column_Name].values
+    model.fit(prep_train, target_train)
+
+    #performance on test set
+    prep_test = get_features(test, featureCOLUMS)
+    predictions = model.predict(prep_test)
+
+    #statistic on testset
+    r2 = np.corrcoef(target_test.flatten(), predictions.flatten())[0,1]**2
+    RMSE_z = np.sqrt(np.mean((target_test.flatten() - predictions.flatten())**2))
+    RMSE_n = np.sqrt(np.mean((target_test.flatten() - np.mean(target_test.flatten()))**2))
+    R2 = 1 - RMSE_z**2/RMSE_n**2
+    MAE = mean_absolute_error(target_test.flatten(), predictions.flatten())
+    max_err = max_error(target_test.flatten(), predictions.flatten())
+    mse = mean_squared_error(target_test.flatten(), predictions.flatten())
+    rmse = np.sqrt(mse)
+
+    #print/plot results
+    print('Performance on testset(r2, R2, MAE, RMSE, Maximal Error, MSE):',r2,';',R2,';',MAE,';',rmse,';',max_err,';', mse)
+
+    r2 = np.corrcoef(predictions, target_test)[0,1]**2
+    plot_2D(['r$^2$ = ' + str(f"{r2:.2f}")], 'upper left', predictions , target_test,
+            'predicted', 'experimental', working_dir + '20-80-split-true-pred.png', '#A43341', 
+            include_line=False, line_style='None')
+    
+    #save model training results
+    pickle.dump(model, open(working_dir + "model.pkl", "wb"))
+
+def add_predictions(data_MMPs, feature_function, model):
+    #for 1
+    data_MMPs['Feature_1'] = data_MMPs['smiles_1'].apply(feature_function)
+    X_data_attributions_1 = get_features(data_MMPs, ['Feature_1'])
+    predictions_1 = model.predict(X_data_attributions_1)
+    data_MMPs['predictions_1'] = predictions_1
+
+    #for 2
+    data_MMPs['Feature_2'] = data_MMPs['smiles_2'].apply(feature_function)
+    X_data_attributions_1 = get_features(data_MMPs, ['Feature_2'])
+    predictions_1 = model.predict(X_data_attributions_1)
+    data_MMPs['predictions_2'] = predictions_1
+    
+    return data_MMPs
+
+def train_test_dependency(data_MMPs, test, Attribution_Colums):
+    data_MMPs['set_1'] = data_MMPs['smiles_1'].isin(test['smiles_std']).map({True: 'test', False: 'train'})
+    data_MMPs['set_2'] = data_MMPs['smiles_2'].isin(test['smiles_std']).map({True: 'test', False: 'train'})
+
+    def compute_r2(data, label):
+        mask = data['set_1'].str.contains(label) & data['set_2'].str.contains(label)
+        filtered = data[mask]
+        for attr in Attribution_Colums:
+            r2 = np.corrcoef(
+                filtered['delta_prediction'],
+                filtered[f'delta_sum_{attr}']
+            )[0, 1] ** 2
+            print(f'{attr}_{label}:', r2)
+    
+    for split in ['train', 'test']:
+        compute_r2(data_MMPs, split)
+    
+    return data_MMPs
+
+def split_MMPs_by_set(data_MMPs, test):
+    data_MMPs['set_1'] = data_MMPs['smiles_1'].isin(test['smiles_std']).map({True: 'test', False: 'train'})
+    data_MMPs['set_2'] = data_MMPs['smiles_2'].isin(test['smiles_std']).map({True: 'test', False: 'train'})
+
+    train_set = data_MMPs[(data_MMPs['set_1'] == 'train') & (data_MMPs['set_2'] == 'train')]
+    test_set = data_MMPs[(data_MMPs['set_1'] == 'test') & (data_MMPs['set_2'] == 'test')]
+
+    return train_set, test_set
