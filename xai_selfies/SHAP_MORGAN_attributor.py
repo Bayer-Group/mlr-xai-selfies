@@ -42,10 +42,9 @@ def weights_morgan(smiles, coefficients_total):
 
     return atom_weights
 
-def get_SHAP_Morgan_attributions(data, feature_column, smiles_column, model):
+def get_SHAP_Morgan_attributions(data, feature_column, smiles_column, model, explainer):
     prep_data = get_features(data, [feature_column])
 
-    explainer = shap.TreeExplainer(model.named_steps['model'])#KernelExplainer(model.predict, model.named_steps['scaler'].transform(prep_data))
     shap_values = explainer.shap_values(model.named_steps['scaler'].transform(prep_data))
     print("Shap values are calculated.")
 
@@ -61,3 +60,17 @@ def get_SHAP_Morgan_attributions(data, feature_column, smiles_column, model):
     data['SHAP Attributions'] = atom_weights_list
 
     return data
+
+def pick_shap_explainer(model):
+    model_type = model.named_steps['model'].__class__.__name__
+    if model_type in ['GradientBoostingRegressor', 'RandomForestRegressor']:
+        explainer = shap.TreeExplainer(model.named_steps['model'])
+    if model_type in ['MLPRegressor', 'SVR', 'GaussianProcessRegressor'] :
+        prep_data = get_features(data, ['Morgan_Fingerprint 2048Bit 2rad'])
+        explainer = shap.KernelExplainer(model.predict, model.named_steps['scaler'].transform(prep_data))
+    if model_type in ['BayesianRidge', 'Lasso', 'LinearRegression'] :
+        prep_data = get_features(data, ['Morgan_Fingerprint 2048Bit 2rad'])
+        explainer = shap.LinearExplainer(model.named_steps['model'],model.named_steps['scaler'].transform(prep_data))
+    if model_type in ['RandomForestClassifier']:
+        explainer = shap.TreeExplainer(model.named_steps['model'], model_output="probability")    #does not work
+    return explainer
